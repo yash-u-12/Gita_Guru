@@ -66,6 +66,9 @@ def populate_database():
         
         # Process slokas
         for sloka_data in data:
+            if 'sloka_number' not in sloka_data:
+                print(f"    Skipping entry without sloka_number: {sloka_data.get('sloka_title', 'Unknown')}")
+                continue
             sloka_number = int(sloka_data['sloka_number'])
             
             # Check if sloka already exists
