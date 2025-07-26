@@ -35,7 +35,7 @@ def test_supabase_connection():
             print("❌ Public bucket not found, creating it...")
             # Try to create bucket
             try:
-                result = supabase.storage.create_bucket('public', {'public': True})
+                result = supabase.storage.create_bucket('public')
                 print(f"✅ Public bucket created: {result}")
             except Exception as e:
                 print(f"❌ Failed to create bucket: {str(e)}")
