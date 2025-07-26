@@ -1,0 +1,9 @@
+modules = ["python-3.12"]
+run = "streamlit run undefined"
+
+[nix]
+channel = "stable-25_05"
+packages = ["glibcLocales"]
+
+[deployment]
+run = ["sh", "-c", "streamlit run undefined"]
