@@ -1,13 +1,25 @@
 import os
 import glob
+import json
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from supabase import create_client
 from config import SUPABASE_URL, SUPABASE_KEY, AUDIO_STORAGE_PATH
 
 def upload_audio_files():
     """Upload all audio files from slokas folder to Supabase Storage"""
     
+    print(f"Using Supabase URL: {SUPABASE_URL}")
+    print(f"Storage path: {AUDIO_STORAGE_PATH}")
+    
     # Initialize Supabase client
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase client initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize Supabase client: {str(e)}")
+        return [], []
     
     # Base path for audio files
     base_path = "slokas"
@@ -54,8 +66,10 @@ def upload_audio_files():
                     result = supabase.storage.from_('public').upload(
                         path=storage_path,
                         file=file,
-                        file_options={"content-type": "audio/mpeg"}
+                        file_options={"content-type": "audio/mpeg", "upsert": "true"}
                     )
+                
+                print(f"    Upload result: {result}")
                 
                 # Get public URL
                 public_url = supabase.storage.from_('public').get_public_url(storage_path)
@@ -99,14 +113,16 @@ def upload_audio_files():
             print(f"  Chapter {failure['chapter']}, Sloka {failure['sloka']}: {failure['error']}")
     
     # Save results to file for reference
-    import json
-    with open('upload_results.json', 'w', encoding='utf-8') as f:
-        json.dump({
-            'successful_uploads': upload_results,
-            'failed_uploads': failed_uploads
-        }, f, indent=2, ensure_ascii=False)
-    
-    print(f"\nResults saved to upload_results.json")
+    try:
+        with open('upload_results.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                'successful_uploads': upload_results,
+                'failed_uploads': failed_uploads
+            }, f, indent=2, ensure_ascii=False)
+        
+        print(f"\nResults saved to upload_results.json")
+    except Exception as e:
+        print(f"❌ Failed to save upload_results.json: {str(e)}")
     
     return upload_results, failed_uploads
 
