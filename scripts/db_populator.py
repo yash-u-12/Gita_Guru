@@ -1,112 +1,89 @@
 import json
 import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from supabase import create_client, Client
+from config import SUPABASE_URL, SUPABASE_KEY
 
-from database.db_utils import db_manager
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def load_json_data(filename):
-    """Load JSON data from file"""
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading {filename}: {e}")
-        return None
+def load_json_data(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def populate_database():
-    """Populate database with chapters and slokas from JSON files"""
-    
-    print("Starting database population...")
-    
-    # JSON files to process
-    json_files = [
-        'chapter12.json',
-        'chapter15.json', 
-        'chapter16.json'
-    ]
-    
-    chapters_created = []
-    slokas_created = []
-    
-    for json_file in json_files:
-        print(f"\nProcessing {json_file}...")
-        
-        # Load JSON data
-        data = load_json_data(json_file)
-        if not data:
+def populate_from_json_file(filepath):
+    print(f"\n Processing: {os.path.basename(filepath)}")
+    slokas = load_json_data(filepath)
+
+    if not slokas or not isinstance(slokas, list):
+        print(f"  Skipping file {filepath}: No valid data")
+        return
+
+    # Extract chapter info from first sloka
+    chapter_number = int(slokas[0].get("chapter", 0))
+    chapter_name = slokas[0].get("chapter_name", f"Chapter {chapter_number}")
+
+    # --- Upsert Chapter ---
+    # Upsert the chapter first
+    supabase.table("chapters").upsert(
+    {
+        "chapter_number": chapter_number,
+        "chapter_name": chapter_name,
+    },
+    on_conflict=["chapter_number"]
+    ).execute()
+
+    # Fetch the chapter ID manually after upsert
+    chapter_response = supabase.table("chapters").select("id").eq("chapter_number", chapter_number).single().execute()
+    chapter_id = chapter_response.data["id"]
+    print(f" Upserted Chapter {chapter_number} (ID: {chapter_id})")
+
+    # --- Upsert Slokas ---
+    sloka_count = 0
+    for sloka in slokas:
+        if "sloka_number" not in sloka:
+            print(f" Skipping invalid entry (missing sloka_number): {sloka.get('sloka_title', 'Unknown')}")
             continue
-            
-        # Get first sloka to extract chapter info
-        if not data:
-            print(f"No data found in {json_file}")
-            continue
-            
-        first_sloka = data[0]
-        chapter_number = first_sloka['chapter']
-        chapter_name = first_sloka.get('chapter_name', f'Chapter {chapter_number}')
-        
-        print(f"Chapter {chapter_number}: {chapter_name}")
-        
-        # Check if chapter already exists
-        existing_chapter = db_manager.get_chapter_by_number(chapter_number)
-        if existing_chapter:
-            print(f"  Chapter {chapter_number} already exists, skipping...")
-            chapter_id = existing_chapter['id']
-        else:
-            # Create chapter
-            chapter = db_manager.create_chapter(chapter_number, chapter_name)
-            if chapter:
-                chapter_id = chapter['id']
-                chapters_created.append(chapter)
-                print(f"  ✅ Created chapter: {chapter_name}")
-            else:
-                print(f"  ❌ Failed to create chapter {chapter_number}")
-                continue
-        
-        # Process slokas
-        for sloka_data in data:
-            if 'sloka_number' not in sloka_data:
-                print(f"    Skipping entry without sloka_number: {sloka_data.get('sloka_title', 'Unknown')}")
-                continue
-            sloka_number = int(sloka_data['sloka_number'])
-            
-            # Check if sloka already exists
-            existing_sloka = db_manager.get_sloka_by_chapter_and_number(chapter_id, sloka_number)
-            if existing_sloka:
-                print(f"    Sloka {sloka_number} already exists, skipping...")
-                continue
-            
-            # Create sloka (without audio URL for now)
-            sloka = db_manager.create_sloka(
-                chapter_id=chapter_id,
-                sloka_number=sloka_number,
-                sloka_text_telugu=sloka_data['sloka_text'],
-                meaning_telugu=sloka_data['telugu_meaning'],
-                meaning_english=sloka_data['english_meaning']
-            )
-            
-            if sloka:
-                slokas_created.append(sloka)
-                print(f"    ✅ Created sloka {sloka_number}")
-            else:
-                print(f"    ❌ Failed to create sloka {sloka_number}")
-    
-    # Print summary
-    print(f"\n{'='*50}")
-    print("DATABASE POPULATION SUMMARY")
-    print(f"{'='*50}")
-    print(f"Chapters created: {len(chapters_created)}")
-    print(f"Slokas created: {len(slokas_created)}")
-    
-    if chapters_created:
-        print(f"\nChapters created:")
-        for chapter in chapters_created:
-            print(f"  Chapter {chapter['chapter_number']}: {chapter['chapter_name']}")
-    
-    print(f"\nDatabase population completed!")
-    
-    return chapters_created, slokas_created
+
+        sloka_number = int(sloka["sloka_number"])
+        sloka_text = sloka.get("sloka_text", "")
+        telugu_meaning = sloka.get("telugu_meaning", "")
+        english_meaning = sloka.get("english_meaning", "")
+        reference_audio_url = sloka.get("reference_audio_url", "")
+
+        supabase.table("slokas").upsert(
+            {
+                "chapter_id": chapter_id,
+                "sloka_number": sloka_number,
+                "sloka_text_telugu": sloka_text,
+                "meaning_telugu": telugu_meaning,
+                "meaning_english": english_meaning,
+                "reference_audio_url": reference_audio_url,
+            },
+            on_conflict="chapter_id,sloka_number"
+        ).execute()
+        sloka_count += 1
+        print(f"   -  Upserted Sloka {sloka_number}")
+
+    print(f" Total Slokas Processed: {sloka_count}")
+
+def populate_all_chapters():
+    data_dir = "data"
+    if not os.path.exists(data_dir):
+        print(f" 'data/' folder not found.")
+        return
+
+    json_files = [f for f in os.listdir(data_dir) if f.endswith(".json")]
+
+    if not json_files:
+        print("  No JSON files found in the 'data/' folder.")
+        return
+
+    print(f" Found {len(json_files)} chapter file(s): {json_files}")
+    for file_name in json_files:
+        file_path = os.path.join(data_dir, file_name)
+        populate_from_json_file(file_path)
+
+    print("\n All chapters processed successfully.")
 
 if __name__ == "__main__":
-    populate_database() 
+    populate_all_chapters()

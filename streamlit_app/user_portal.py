@@ -8,6 +8,9 @@ from database.db_utils import db_manager
 from config import SUPABASE_URL, SUPABASE_KEY, USER_SUBMISSIONS_PATH
 from supabase import create_client
 
+SUPABASE_URL = "https://jutfhqtwfdmgedmdmizz.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1dGZocXR3ZmRtZ2VkbWRtaXp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1MDU0OTUsImV4cCI6MjA2OTA4MTQ5NX0.YKGcX4OvtQNJiNndKvC9mlX8gOC2xHpOuM2xnOrjI44"
+
 # Initialize Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
