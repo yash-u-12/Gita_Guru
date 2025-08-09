@@ -1,20 +1,20 @@
--- Enable UUID extension
+-- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =====================
--- Chapters table
--- =====================
+-- =======================
+-- TABLE: CHAPTERS
+-- =======================
 CREATE TABLE IF NOT EXISTS chapters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chapter_number INTEGER UNIQUE NOT NULL,
     chapter_name TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =====================
--- Slokas table
--- =====================
+-- =======================
+-- TABLE: SLOKAS
+-- =======================
 CREATE TABLE IF NOT EXISTS slokas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chapter_id UUID REFERENCES chapters(id) ON DELETE CASCADE,
@@ -23,25 +23,25 @@ CREATE TABLE IF NOT EXISTS slokas (
     meaning_telugu TEXT NOT NULL,
     meaning_english TEXT NOT NULL,
     reference_audio_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(chapter_id, sloka_number)
 );
 
--- =====================
--- Users table
--- =====================
+-- =======================
+-- TABLE: USERS
+-- =======================
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY,  -- Must match auth.uid()
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =====================
--- User Submissions table
--- =====================
+-- =======================
+-- TABLE: USER SUBMISSIONS
+-- =======================
 CREATE TABLE IF NOT EXISTS user_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -50,87 +50,50 @@ CREATE TABLE IF NOT EXISTS user_submissions (
     explanation_audio_url TEXT,
     status TEXT CHECK (status IN ('Submitted', 'Approved', 'Rejected')) DEFAULT 'Submitted',
     admin_notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =====================
--- Indexes
--- =====================
-CREATE INDEX IF NOT EXISTS idx_slokas_chapter_id ON slokas(chapter_id);
-CREATE INDEX IF NOT EXISTS idx_slokas_chapter_sloka ON slokas(chapter_id, sloka_number);
-CREATE INDEX IF NOT EXISTS idx_user_submissions_user_id ON user_submissions(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_submissions_sloka_id ON user_submissions(sloka_id);
-CREATE INDEX IF NOT EXISTS idx_user_submissions_status ON user_submissions(status);
+-- =======================
+-- ENABLE RLS
+-- =======================
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_submissions ENABLE ROW LEVEL SECURITY;
 
--- =====================
--- Updated_at Trigger Function
--- =====================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- =======================
+-- RLS POLICIES: USERS
+-- =======================
+DROP POLICY IF EXISTS "Users can read their own data" ON users;
+DROP POLICY IF EXISTS "Users can insert themselves" ON users;
 
--- =====================
--- Triggers for updated_at
--- =====================
-DROP TRIGGER IF EXISTS update_chapters_updated_at ON chapters;
-CREATE TRIGGER update_chapters_updated_at
-BEFORE UPDATE ON chapters
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-DROP TRIGGER IF EXISTS update_slokas_updated_at ON slokas;
-CREATE TRIGGER update_slokas_updated_at
-BEFORE UPDATE ON slokas
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-DROP TRIGGER IF EXISTS update_users_updated_at ON users;
-CREATE TRIGGER update_users_updated_at
-BEFORE UPDATE ON users
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-DROP TRIGGER IF EXISTS update_user_submissions_updated_at ON user_submissions;
-CREATE TRIGGER update_user_submissions_updated_at
-BEFORE UPDATE ON user_submissions
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- =====================
--- Enable Row Level Security (RLS)
--- =====================
-
--- Users table: Enable RLS and secure access to user data
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read their own data"
-ON public.users
-FOR SELECT
+ON users FOR SELECT
 USING (id = auth.uid());
 
--- User Submissions table: Enable RLS and secure access to submissions
-ALTER TABLE public.user_submissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can insert themselves"
+ON users FOR INSERT
+WITH CHECK (id = auth.uid());
 
--- SELECT
+-- =======================
+-- RLS POLICIES: USER SUBMISSIONS
+-- =======================
+DROP POLICY IF EXISTS "Users can read their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can insert their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can update their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can delete their own submissions" ON user_submissions;
+
 CREATE POLICY "Users can read their own submissions"
-ON public.user_submissions
-FOR SELECT
+ON user_submissions FOR SELECT
 USING (user_id = auth.uid());
 
--- INSERT
 CREATE POLICY "Users can insert their own submissions"
-ON public.user_submissions
-FOR INSERT
+ON user_submissions FOR INSERT
 WITH CHECK (user_id = auth.uid());
 
--- UPDATE
 CREATE POLICY "Users can update their own submissions"
-ON public.user_submissions
-FOR UPDATE
+ON user_submissions FOR UPDATE
 USING (user_id = auth.uid());
 
--- DELETE (optional - include only if needed)
 CREATE POLICY "Users can delete their own submissions"
-ON public.user_submissions
-FOR DELETE
+ON user_submissions FOR DELETE
 USING (user_id = auth.uid());

@@ -51,6 +51,8 @@ def main():
         subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         subprocess.run([sys.executable, "-m", "pip", "install", "--only-binary", "psycopg2-binary", "psycopg2-binary==2.9.10"], check=True)
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
+        subprocess.run([sys.executable, "-m", "pip", "install", "git+https://github.com/stefanrmmr/streamlit_audio_recorder.git"], check=True)
+
         print("✅ Dependencies installed successfully!")
     except subprocess.CalledProcessError as e:
         print(f"❌ Failed to install dependencies: {e}")
@@ -86,7 +88,7 @@ def main():
 
     print("\n🎉 GITA GURU PLATFORM IS READY!")
     print("\nNext steps:")
-    print("1. Run the user portal: streamlit run streamlit_app/user_portal.py")
+    print("1. Run the user portal: streamlit run streamlit_app/login.py")
     print("2. Run the admin dashboard: streamlit run streamlit_app/admin_dashboard.py")
 
     print("\nUser Portal Features:")

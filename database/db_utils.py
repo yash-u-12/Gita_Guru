@@ -1,29 +1,29 @@
-import json
 import os
+import uuid
 from supabase import create_client, Client
-from config import SUPABASE_URL, SUPABASE_KEY
+from config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_ROLE_KEY
 
 class DatabaseManager:
     def __init__(self):
+        # Public client (anon) used for storage and regular reads (subject to RLS)
         self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    
+        # Admin client (service role) for checks/inserts that must bypass RLS (server-side use only)
+        self.admin_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    # ---------------- Chapters / Slokas ----------------
     def create_chapter(self, chapter_number: int, chapter_name: str):
         try:
-            data = {
-                'chapter_number': chapter_number,
-                'chapter_name': chapter_name
-            }
-            result = self.supabase.table('chapters').insert(data).execute()
+            data = {'chapter_number': chapter_number, 'chapter_name': chapter_name}
+            result = self.admin_client.table('chapters').insert(data).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error creating chapter {chapter_number}: {e}")
             return None
 
-    def upsert_sloka(self, chapter_id: str, sloka_number: int, sloka_text_telugu: str, 
+    def upsert_sloka(self, chapter_id: str, sloka_number: int, sloka_text_telugu: str,
                      meaning_telugu: str, meaning_english: str, reference_audio_url: str = None):
-        """Insert or update sloka if already exists"""
         try:
-            existing = self.get_sloka_by_chapter_and_number(chapter_id, sloka_number)
+            existing = self.admin_client.table('slokas').select('*').eq('chapter_id', chapter_id).eq('sloka_number', sloka_number).execute()
             data = {
                 'chapter_id': chapter_id,
                 'sloka_number': sloka_number,
@@ -32,16 +32,15 @@ class DatabaseManager:
                 'meaning_english': meaning_english,
                 'reference_audio_url': reference_audio_url
             }
-
-            if existing:
-                result = self.supabase.table('slokas').update(data).eq('id', existing['id']).execute()
+            if existing.data:
+                result = self.admin_client.table('slokas').update(data).eq('id', existing.data[0]['id']).execute()
             else:
-                result = self.supabase.table('slokas').insert(data).execute()
+                result = self.admin_client.table('slokas').insert(data).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error upserting sloka {sloka_number}: {e}")
             return None
-    
+
     def get_chapter_by_number(self, chapter_number: int):
         try:
             result = self.supabase.table('chapters').select('*').eq('chapter_number', chapter_number).execute()
@@ -49,7 +48,7 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error getting chapter {chapter_number}: {e}")
             return None
-    
+
     def get_sloka_by_chapter_and_number(self, chapter_id: str, sloka_number: int):
         try:
             result = self.supabase.table('slokas').select('*').eq('chapter_id', chapter_id).eq('sloka_number', sloka_number).execute()
@@ -57,15 +56,15 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error getting sloka {sloka_number}: {e}")
             return None
-    
+
     def update_sloka_audio_url(self, sloka_id: str, audio_url: str):
         try:
-            result = self.supabase.table('slokas').update({'reference_audio_url': audio_url}).eq('id', sloka_id).execute()
+            result = self.admin_client.table('slokas').update({'reference_audio_url': audio_url}).eq('id', sloka_id).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error updating sloka audio URL: {e}")
             return None
-    
+
     def get_all_chapters(self):
         try:
             result = self.supabase.table('chapters').select('*').order('chapter_number').execute()
@@ -73,7 +72,7 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error getting chapters: {e}")
             return []
-    
+
     def get_slokas_by_chapter(self, chapter_id: str):
         try:
             result = self.supabase.table('slokas').select('*').eq('chapter_id', chapter_id).order('sloka_number').execute()
@@ -81,24 +80,64 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error getting slokas for chapter {chapter_id}: {e}")
             return []
-    
-    def create_user(self, name: str, email: str):
+
+    # ---------------- Users ----------------
+    def create_user(self, user_id: str, name: str, email: str):
+        """
+        Inserts user using admin client (bypassing RLS). Use only from trusted server code.
+        """
         try:
-            data = {'name': name, 'email': email}
-            result = self.supabase.table('users').insert(data).execute()
+            data = {'id': user_id, 'name': name, 'email': email}
+            result = self.admin_client.table('users').insert(data).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error creating user: {e}")
             return None
-    
+
     def get_user_by_email(self, email: str):
         try:
-            result = self.supabase.table('users').select('*').eq('email', email).execute()
+            result = self.admin_client.table('users').select('*').eq('email', email).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error getting user by email: {e}")
             return None
-    
+
+    def get_user_by_id(self, user_id: str):
+        try:
+            result = self.admin_client.table('users').select('*').eq('id', user_id).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error getting user by id: {e}")
+            return None
+
+    def create_user_if_not_exists(self, user_id: str, name: str, email: str):
+        """
+        Ensure a single canonical user row: check by id and email using admin client
+        (bypass RLS) and create only when missing. Returns existing/new user row.
+        """
+        try:
+            # Check by id
+            existing = self.get_user_by_id(user_id)
+            if existing:
+                return existing
+
+            # Check by email
+            existing = self.get_user_by_email(email)
+            if existing:
+                return existing
+
+            # Insert using admin (service role). This bypasses RLS and avoids duplicate key issues.
+            result = self.admin_client.table('users').insert({
+                'id': user_id,
+                'name': name,
+                'email': email
+            }).execute()
+
+            return result.data[0] if result.data else None
+        except Exception as e:
+            raise Exception(f"Error creating user: {e}")
+
+    # ---------------- Submissions ----------------
     def create_user_submission(self, user_id: str, sloka_id: str, recitation_audio_url: str = None, explanation_audio_url: str = None):
         try:
             data = {
@@ -108,15 +147,15 @@ class DatabaseManager:
                 'explanation_audio_url': explanation_audio_url,
                 'status': 'Submitted'
             }
-            result = self.supabase.table('user_submissions').insert(data).execute()
+            result = self.admin_client.table('user_submissions').insert(data).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error creating user submission: {e}")
             return None
-    
+
     def get_user_submissions(self, user_id: str = None, sloka_id: str = None, status: str = None):
         try:
-            query = self.supabase.table('user_submissions').select('*, users(name, email), slokas(sloka_number, sloka_text_telugu)')
+            query = self.admin_client.table('user_submissions').select('*, users(name, email), slokas(sloka_number, sloka_text_telugu)')
             if user_id:
                 query = query.eq('user_id', user_id)
             if sloka_id:
@@ -128,17 +167,22 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error getting user submissions: {e}")
             return []
-    
+
     def update_submission_status(self, submission_id: str, status: str, admin_notes: str = None):
         try:
             data = {'status': status}
             if admin_notes:
                 data['admin_notes'] = admin_notes
-            result = self.supabase.table('user_submissions').update(data).eq('id', submission_id).execute()
+            result = self.admin_client.table('user_submissions').update(data).eq('id', submission_id).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             print(f"Error updating submission status: {e}")
             return None
+
+    # exposing admin_client for convenience if needed elsewhere (use carefully)
+    @property
+    def admin(self):
+        return self.admin_client
 
 # Global instance
 db_manager = DatabaseManager()
