@@ -27,7 +27,7 @@ Thumbs.db
 .venv/
 
 # Ignore config file with secrets
-streamlit_app/config.py
+config.py
 scripts/config.py
 
 # Ignore Python cache

@@ -1,9 +1,26 @@
+-- =====================================
 -- Enable UUID Extension
+-- =====================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =======================
+-- =====================================
+-- Clear existing policies and triggers
+-- =====================================
+DROP TRIGGER IF EXISTS set_user_id_trigger ON user_submissions;
+DROP FUNCTION IF EXISTS set_user_id();
+
+-- Drop all existing RLS policies
+DROP POLICY IF EXISTS "Users can read their own data" ON users;
+DROP POLICY IF EXISTS "Users can insert themselves" ON users;
+DROP POLICY IF EXISTS "Users can update themselves" ON users;
+DROP POLICY IF EXISTS "Users can read their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can insert their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can update their own submissions" ON user_submissions;
+DROP POLICY IF EXISTS "Users can delete their own submissions" ON user_submissions;
+
+-- =====================================
 -- TABLE: CHAPTERS
--- =======================
+-- =====================================
 CREATE TABLE IF NOT EXISTS chapters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chapter_number INTEGER UNIQUE NOT NULL,
@@ -12,9 +29,9 @@ CREATE TABLE IF NOT EXISTS chapters (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =======================
+-- =====================================
 -- TABLE: SLOKAS
--- =======================
+-- =====================================
 CREATE TABLE IF NOT EXISTS slokas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chapter_id UUID REFERENCES chapters(id) ON DELETE CASCADE,
@@ -28,23 +45,23 @@ CREATE TABLE IF NOT EXISTS slokas (
     UNIQUE(chapter_id, sloka_number)
 );
 
--- =======================
+-- =====================================
 -- TABLE: USERS
--- =======================
+-- =====================================
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY,  -- Must match auth.uid()
+    id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =======================
+-- =====================================
 -- TABLE: USER SUBMISSIONS
--- =======================
+-- =====================================
 CREATE TABLE IF NOT EXISTS user_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL, -- Remove the foreign key constraint temporarily
     sloka_id UUID REFERENCES slokas(id) ON DELETE CASCADE,
     recitation_audio_url TEXT,
     explanation_audio_url TEXT,
@@ -54,46 +71,46 @@ CREATE TABLE IF NOT EXISTS user_submissions (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =======================
--- ENABLE RLS
--- =======================
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_submissions ENABLE ROW LEVEL SECURITY;
+-- =====================================
+-- DISABLE RLS temporarily to test
+-- =====================================
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE user_submissions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chapters DISABLE ROW LEVEL SECURITY;
+ALTER TABLE slokas DISABLE ROW LEVEL SECURITY;
 
--- =======================
--- RLS POLICIES: USERS
--- =======================
-DROP POLICY IF EXISTS "Users can read their own data" ON users;
-DROP POLICY IF EXISTS "Users can insert themselves" ON users;
+-- =====================================
+-- STORAGE SETUP
+-- =====================================
+-- Ensure bucket exists
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('audio', 'audio', true)
+ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "Users can read their own data"
-ON users FOR SELECT
-USING (id = auth.uid());
+-- Clear all storage policies
+DROP POLICY IF EXISTS "Users can upload their own audio files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can read their own audio files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own audio files" ON storage.objects;
+DROP POLICY IF EXISTS "Public can read audio files" ON storage.objects;
 
-CREATE POLICY "Users can insert themselves"
-ON users FOR INSERT
-WITH CHECK (id = auth.uid());
+-- Simple storage policies
+CREATE POLICY "Anyone can upload audio files"
+ON storage.objects
+FOR INSERT
+WITH CHECK (bucket_id = 'audio');
 
--- =======================
--- RLS POLICIES: USER SUBMISSIONS
--- =======================
-DROP POLICY IF EXISTS "Users can read their own submissions" ON user_submissions;
-DROP POLICY IF EXISTS "Users can insert their own submissions" ON user_submissions;
-DROP POLICY IF EXISTS "Users can update their own submissions" ON user_submissions;
-DROP POLICY IF EXISTS "Users can delete their own submissions" ON user_submissions;
+CREATE POLICY "Anyone can read audio files"
+ON storage.objects
+FOR SELECT
+USING (bucket_id = 'audio');
 
-CREATE POLICY "Users can read their own submissions"
-ON user_submissions FOR SELECT
-USING (user_id = auth.uid());
+CREATE POLICY "Anyone can delete audio files"
+ON storage.objects
+FOR DELETE
+USING (bucket_id = 'audio');
 
-CREATE POLICY "Users can insert their own submissions"
-ON user_submissions FOR INSERT
-WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "Users can update their own submissions"
-ON user_submissions FOR UPDATE
-USING (user_id = auth.uid());
-
-CREATE POLICY "Users can delete their own submissions"
-ON user_submissions FOR DELETE
-USING (user_id = auth.uid());
+CREATE POLICY "Anyone can update audio files"
+ON storage.objects
+FOR UPDATE
+USING (bucket_id = 'audio')
+WITH CHECK (bucket_id = 'audio');
