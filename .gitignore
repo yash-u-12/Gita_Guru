@@ -1,3 +1,28 @@
+# Environment and secrets
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Python caches and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor settings
+.vscode/
+.idea/
+
 # Ignore Python virtual environment
 .venv/
 
