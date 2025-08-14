@@ -6,10 +6,10 @@ load_dotenv()
 
 # Supabase Configuration
 # You need to set these values in your .env file or environment variables
-SUPABASE_URL = "https://jutfhqtwfdmgedmdmizz.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1dGZocXR3ZmRtZ2VkbWRtaXp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM1MDU0OTUsImV4cCI6MjA2OTA4MTQ5NX0.YKGcX4OvtQNJiNndKvC9mlX8gOC2xHpOuM2xnOrjI44"
-AUDIO_STORAGE_PATH = r"C:\Users\varshith\OneDrive\Desktop\gita\Gita_Guru\slokas"
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1dGZocXR3ZmRtZ2VkbWRtaXp6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzUwNTQ5NSwiZXhwIjoyMDY5MDgxNDk1fQ.8O8mMdzVFXtbo--UlfhRjGDuXNSb93hw0RCpg-rfL2w" 
+SUPABASE_URL = "enter the supabase url"
+SUPABASE_KEY = "Enter your supabase key hear"
+AUDIO_STORAGE_PATH = r"gita\Gita_Guru\sloka"
+SUPABASE_SERVICE_ROLE_KEY = "enter your supabase service role key hear" 
 
 # Validate that required environment variables are set
 if not SUPABASE_URL:
